@@ -5,6 +5,7 @@ from collections import defaultdict
 SNAPSHOT_DIR = "snapshots"
 OUTPUT_FILE = "temporal_events.json"
 
+print("[DEBUG] TEMPORAL ANALYZER FILE:", __file__)
 
 def load_snapshots():
     files = sorted(f for f in os.listdir(SNAPSHOT_DIR) if f.endswith(".json"))

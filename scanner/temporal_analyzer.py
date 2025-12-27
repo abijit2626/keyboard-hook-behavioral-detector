@@ -17,19 +17,44 @@ def load_snapshots():
             logger.warning(f"Snapshot directory {SNAPSHOT_DIR} does not exist")
             return []
         
-        files = sorted(f for f in os.listdir(SNAPSHOT_DIR) if f.endswith(".json"))
+        files = [f for f in os.listdir(SNAPSHOT_DIR) if f.endswith(".json")]
         logger.debug(f"Found {len(files)} snapshot file(s)")
         
         snapshots = []
         for f in files:
             try:
-                with open(os.path.join(SNAPSHOT_DIR, f), "r", encoding="utf-8") as fp:
-                    snapshots.append({"time": f, "data": json.load(fp)})
+                filepath = os.path.join(SNAPSHOT_DIR, f)
+                with open(filepath, "r", encoding="utf-8") as fp:
+                    data = json.load(fp)
+                    
+                    # Parse timestamp from JSON data
+                    timestamp_str = data.get("timestamp", "")
+                    timestamp_value = None
+                    try:
+                        from datetime import datetime
+                        # Handle both ISO format with and without Z suffix
+                        timestamp_str_clean = timestamp_str.replace('Z', '+00:00')
+                        timestamp = datetime.fromisoformat(timestamp_str_clean)
+                        timestamp_value = timestamp.timestamp()
+                    except (ValueError, AttributeError, TypeError):
+                        # Fallback to file modification time
+                        timestamp_value = os.path.getmtime(filepath)
+                        logger.debug(f"Using file mtime for snapshot {f} (failed to parse timestamp)")
+                    
+                    snapshots.append({
+                        "time": f,
+                        "timestamp": timestamp_value,
+                        "data": data
+                    })
             except (json.JSONDecodeError, IOError) as e:
                 logger.warning(f"Failed to load snapshot {f}: {e}")
                 continue
         
-        return snapshots
+        # Sort by actual timestamp value, not filename
+        snapshots.sort(key=lambda x: x["timestamp"])
+        
+        # Return in original format (without timestamp key)
+        return [{"time": s["time"], "data": s["data"]} for s in snapshots]
     except Exception as e:
         logger.error(f"Error loading snapshots: {e}", exc_info=True)
         return []
@@ -113,11 +138,51 @@ def analyze():
                 logger.info(f"HOOK_REMOVED: {curr['exe']} (PID: {curr['pid']})")
 
     try:
-        with open(OUTPUT_FILE, "w", encoding="utf-8") as f:
+        temp_file = OUTPUT_FILE + ".tmp"
+        with open(temp_file, "w", encoding="utf-8") as f:
+            # Lock file for exclusive write access
+            try:
+                if os.name == 'nt':
+                    import msvcrt
+                    msvcrt.locking(f.fileno(), msvcrt.LK_LOCK, 1)
+                else:
+                    import fcntl
+                    fcntl.flock(f.fileno(), fcntl.LOCK_EX)
+            except (ImportError, AttributeError):
+                logger.warning("File locking not available on this platform")
+            
             json.dump(events, f, indent=2)
+            f.flush()
+            os.fsync(f.fileno())
+            
+            # Unlock
+            try:
+                if os.name == 'nt':
+                    import msvcrt
+                    msvcrt.locking(f.fileno(), msvcrt.LK_UNLCK, 1)
+                else:
+                    import fcntl
+                    fcntl.flock(f.fileno(), fcntl.LOCK_UN)
+            except (ImportError, AttributeError):
+                pass
+        
+        # Atomic rename
+        if os.name == 'nt':
+            if os.path.exists(OUTPUT_FILE):
+                os.remove(OUTPUT_FILE)
+            os.rename(temp_file, OUTPUT_FILE)
+        else:
+            os.rename(temp_file, OUTPUT_FILE)
+            
         logger.info(f"Temporal events written: {OUTPUT_FILE} ({len(events)} events)")
     except IOError as e:
         logger.error(f"Failed to write temporal events to {OUTPUT_FILE}: {e}")
+        temp_file = OUTPUT_FILE + ".tmp"
+        if os.path.exists(temp_file):
+            try:
+                os.remove(temp_file)
+            except:
+                pass
         raise
 
 

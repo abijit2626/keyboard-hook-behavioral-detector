@@ -2,6 +2,7 @@ import psutil
 import os
 import hashlib
 import subprocess
+import time
 
 from scanner.logger_config import setup_logger
 
@@ -14,25 +15,42 @@ logger = setup_logger(__name__)
 def is_signed(path):
     """Check if a file has a valid digital signature."""
     try:
+        # Use -LiteralPath to safely handle paths with special characters
+        # Escape single quotes for PowerShell by doubling them
+        escaped_path = path.replace("'", "''")
         out = subprocess.check_output(
             ["powershell", "-Command",
-             f"(Get-AuthenticodeSignature '{path}').Status"],
-            stderr=subprocess.DEVNULL
-        ).decode()
+             f"(Get-AuthenticodeSignature -LiteralPath '{escaped_path}').Status"],
+            stderr=subprocess.DEVNULL,
+            timeout=5  # 5 second timeout
+        ).decode('utf-8', errors='replace')
         return "Valid" in out
+    except subprocess.TimeoutExpired:
+        logger.warning(f"Signature check timed out for {path}")
+        return False
     except Exception as e:
         logger.debug(f"Failed to check signature for {path}: {e}")
         return False
 
 
-def sha256(path):
-    """Calculate SHA256 hash of a file."""
+def sha256(path, timeout=10):
+    """Calculate SHA256 hash of a file with timeout."""
+    start_time = time.time()
     try:
         h = hashlib.sha256()
         with open(path, "rb") as f:
-            for chunk in iter(lambda: f.read(8192), b""):
+            while True:
+                if time.time() - start_time > timeout:
+                    logger.warning(f"Hash calculation timeout for {path}")
+                    return None
+                chunk = f.read(8192)
+                if not chunk:
+                    break
                 h.update(chunk)
         return h.hexdigest()
+    except PermissionError:
+        logger.debug(f"Permission denied reading {path} for hash")
+        return None
     except Exception as e:
         logger.debug(f"Failed to calculate hash for {path}: {e}")
         return None

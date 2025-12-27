@@ -7,7 +7,7 @@ This project is a **Windows user-mode behavioral monitoring tool** designed to i
 It does **not** attempt to intercept keystrokes, inject code, or operate at kernel level.  
 Instead, it focuses on **capability detection, behavior observation, and risk persistence** — similar in spirit to modern EDR telemetry agents.
 
-⚠️ This is **not a malware classifier**.  
+ This is **not a malware classifier**.  
 It is a **behavioral risk assessment tool**.
 
 ---

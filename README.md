@@ -76,6 +76,7 @@ project-root/
 │ ├── keyboard_hook_detector.py # Capability detection + base risk
 │ ├── temporal_analyzer.py # Behavior change detection
 │ ├── temporal_risk_engine.py # Risk persistence + decay
+│ ├── config.py
 │ └── init.py
 │
 ├── snapshots/ # Timestamped scan results

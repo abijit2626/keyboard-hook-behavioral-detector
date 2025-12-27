@@ -112,15 +112,14 @@ def analyze():
         # Check first record for initial suspicion
         if records:
             first = records[0]
-            if first["dlls"]:
-                events.append({
-                    "event": "SUSPECT_DETECTED",
-                    "identity": identity,
-                    "exe": first["exe"],
-                    "pid": first["pid"],
-                    "time": first["time"]
-                })
-                logger.debug(f"SUSPECT_DETECTED: {first['exe']} (PID: {first['pid']})")
+            events.append({
+                "event": "SUSPECT_DETECTED",
+                "identity": identity,
+                "exe": first["exe"],
+                "pid": first["pid"],
+                "time": first["time"]
+            })
+            logger.debug(f"SUSPECT_DETECTED: {first['exe']} (PID: {first['pid']})")
 
         for i in range(1, len(records)):
             prev, curr = records[i - 1], records[i]

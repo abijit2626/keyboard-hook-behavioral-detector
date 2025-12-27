@@ -6,7 +6,7 @@ import time
 from functools import lru_cache
 
 from scanner.logger_config import setup_logger
-from scanner.config import WINDOWS_DIR
+from scanner.config import WINDOWS_DIR, ALLOWLIST
 
 logger = setup_logger(__name__)
 
@@ -33,6 +33,7 @@ def is_signed(path):
         return False
 
 
+@lru_cache(maxsize=2048)
 def sha256(path, timeout=10):
     """Calculate SHA256 hash of a file with timeout."""
     start_time = time.time()
@@ -76,28 +77,36 @@ def detect_keyboard_hook_suspects():
                 skipped_count += 1
                 continue  # identity impossible
 
+            import os.path
+            basename = os.path.basename(exe).lower() if exe else ""
+            if basename in ALLOWLIST:
+                skipped_count += 1
+                continue
+
             try:
-                modules = [m.path for m in proc.memory_maps() if m.path]
+                found_user32 = False
+                suspicious_dlls = []
+                for m in proc.memory_maps():
+                    p = getattr(m, "path", None)
+                    if not p:
+                        continue
+                    pl = p.lower()
+                    if "user32.dll" in pl:
+                        found_user32 = True
+                    if pl.endswith(".dll") and not pl.startswith(WINDOWS_DIR):
+                        suspicious_dlls.append({
+                            "dll": p,
+                            "signed": is_signed(p),
+                            "hash": sha256(p)
+                        })
             except (psutil.AccessDenied, psutil.NoSuchProcess) as e:
                 logger.debug(f"Access denied or process gone for PID {pid}: {e}")
                 skipped_count += 1
                 continue
 
-            if not any("user32.dll" in m.lower() for m in modules):
+            if not found_user32:
                 skipped_count += 1
                 continue
-
-            suspicious_dlls = []
-            for m in modules:
-                m_lower = m.lower()
-                if m_lower.startswith(WINDOWS_DIR):
-                    continue
-                if m_lower.endswith(".dll"):
-                    suspicious_dlls.append({
-                        "dll": m,
-                        "signed": is_signed(m),
-                        "hash": sha256(m)
-                    })
 
             entry = {
                 "pid": pid,

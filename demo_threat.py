@@ -11,13 +11,15 @@ kernel32 = ctypes.windll.kernel32
 WH_KEYBOARD_LL = 13
 WM_KEYDOWN = 0x0100
 
+HOOKPROC = ctypes.WINFUNCTYPE(ctypes.c_int, ctypes.c_int, wintypes.WPARAM, ctypes.c_void_p)
+
+user32.CallNextHookEx.argtypes = [ctypes.c_void_p, ctypes.c_int, wintypes.WPARAM, ctypes.c_void_p]
+user32.CallNextHookEx.restype = ctypes.c_int
+
 def hook_proc(nCode, wParam, lParam):
-    # Pass the event to the next hook in the chain (don't actually block/log keys)
     return user32.CallNextHookEx(None, nCode, wParam, lParam)
 
-# Define the callback function type
-CMPFUNC = ctypes.CFUNCTYPE(ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.POINTER(ctypes.c_void_p))
-pointer = CMPFUNC(hook_proc)
+pointer = HOOKPROC(hook_proc)
 
 def main():
     print(f"PID: {os.getpid()}")
@@ -25,19 +27,22 @@ def main():
     
     # Install the low-level keyboard hook
     # GetModuleHandleW(None) gets the handle to the current process (python.exe)
+    user32.SetWindowsHookExW.argtypes = [ctypes.c_int, HOOKPROC, wintypes.HINSTANCE, wintypes.DWORD]
+    user32.SetWindowsHookExW.restype = ctypes.c_void_p
+    kernel32.GetModuleHandleW.argtypes = [wintypes.LPCWSTR]
+    kernel32.GetModuleHandleW.restype = wintypes.HMODULE
+    kernel32.GetLastError.restype = wintypes.DWORD
+
     try:
-        hook = user32.SetWindowsHookExW(
-            WH_KEYBOARD_LL,
-            pointer,
-            kernel32.GetModuleHandleW(None),
-            0
-        )
+        hmod = kernel32.GetModuleHandleW(None)
+        hook = user32.SetWindowsHookExW(WH_KEYBOARD_LL, pointer, hmod, 0)
     except Exception as e:
         print(f"Failed to install hook: {e}")
         return
-    
+
     if not hook:
-        print("Failed to install hook. Run as Administrator might be required (but usually not for user hooks).")
+        err = kernel32.GetLastError()
+        print(f"Failed to install hook (error {err}). Try running PowerShell as Administrator and ensure 64-bit Python.")
         return
 
     print("Hook installed. This process is now acting like a keylogger.")

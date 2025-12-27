@@ -23,11 +23,21 @@ RISK_HIGH_THRESHOLD = 60
 # Event Risk Weights
 # Positive = Adds risk, Negative = Reduces risk
 EVENT_WEIGHTS = {
-    "SUSPECT_DETECTED": 20,  # Initial detection of a suspicious process
-    "HOOK_APPEARED": 10,     # weak-to-medium signal
-    "NEW_HOOK_MODULE": 35,   # strong signal
-    "HOOK_REMOVED": -10      # relief
+    "SUSPECT_DETECTED": 15,
+    "HOOK_APPEARED": 10,
+    "NEW_HOOK_MODULE": 35,
+    "HOOK_REMOVED": -10
 }
 
 # --- System Settings ---
 WINDOWS_DIR = os.environ.get("WINDIR", "C:\\Windows").lower()
+ALLOWLIST = {
+    "discord.exe",
+    "signal.exe",
+    "chrome.exe",
+    "msedge.exe",
+    "zoom.exe",
+    "teams.exe",
+    "slack.exe",
+    "steam.exe"
+}

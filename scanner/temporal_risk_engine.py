@@ -4,7 +4,7 @@ import os
 
 from scanner.logger_config import setup_logger
 from scanner.config import (
-    EVENT_WEIGHTS, RISK_DECAY, RISK_MEDIUM_THRESHOLD, RISK_HIGH_THRESHOLD
+    EVENT_WEIGHTS, RISK_DECAY, RISK_MEDIUM_THRESHOLD, RISK_HIGH_THRESHOLD, ALLOWLIST
 )
 
 STATE_FILE = "temporal_state.json"
@@ -137,7 +137,16 @@ def update_temporal_risk(events):
 
         old_score = s["risk_score"]
         s["event_counts"][etype] = s["event_counts"].get(etype, 0) + 1
-        weight = EVENT_WEIGHTS.get(etype, 0)
+        import os.path
+        base = os.path.basename(s["exe"]).lower()
+        if base in ALLOWLIST:
+            weight = 0
+        else:
+            weight = EVENT_WEIGHTS.get(etype, 0)
+            gated = etype in ("HOOK_APPEARED", "NEW_HOOK_MODULE")
+            has_base = s["event_counts"].get("SUSPECT_DETECTED", 0) > 0 or s["risk_score"] > 0
+            if gated and not has_base:
+                weight = 0
         s["risk_score"] += weight
         s["last_seen"] = now
         

@@ -28,7 +28,8 @@ python train_model.py
 python main_controller.py
 
 # In another terminal, at any time: see the current risk picture
-python -m scanner.report
+python -m scanner.report        # terminal table
+python -m scanner.dashboard     # web dashboard at http://127.0.0.1:5000
 ```
 
 `scanner/report.py` prints a live-updating table like:
@@ -42,6 +43,11 @@ LOW   11     5%          2%             -                                 C:\Pro
 
 3 process(es) tracked -- 1 HIGH, 0 MEDIUM.
 ```
+
+`python -m scanner.dashboard` serves the same data as a dark, auto-refreshing
+web page — summary cards, color-coded risk badges, per-process ML/ATT&CK
+score bars, a search box, and a "hide LOW risk" toggle. See *Web Dashboard*
+below.
 
 ---
 
@@ -205,6 +211,34 @@ score 0 regardless of what either model says.
 
 ---
 
+## Web Dashboard
+
+```
+python -m scanner.dashboard              # http://127.0.0.1:5000, local-only by default
+python -m scanner.dashboard --port 8080  # custom port
+python -m scanner.dashboard --host 0.0.0.0   # opt-in to expose beyond localhost
+```
+
+A small read-only Flask app (`scanner/dashboard/`) that reads the exact same
+`temporal_state.json` as `scanner/report.py` — it never touches the
+scanner/analyzer/risk-engine pipeline, so it's safe to leave running
+alongside `main_controller.py` on Windows, or point at a copy of the state
+file from any OS to review results afterward.
+
+- **Summary cards** — total tracked, HIGH / MEDIUM / LOW counts
+- **Per-process row** — risk badge, score, malware-ML % bar, keylogger-API % bar, matched ATT&CK technique tags, executable path, last-seen (relative time)
+- **Live** — polls `/api/state` every 3s and re-renders in place, no page reload
+- **Search + filter** — filter by executable path, or hide LOW-risk rows to cut noise
+- Binds to `127.0.0.1` by default — deliberately local-only. This tool's own
+  telemetry (which processes look suspicious, on which machine) is itself
+  sensitive; it doesn't go on the network without an explicit `--host` flag.
+
+No new detection logic lives here — same rule that governs the rest of the
+project: the dashboard only ever displays what `temporal_risk_engine.py`
+already decided, it never re-scores anything client-side.
+
+---
+
 ## Architecture
 ```
 project-root/
@@ -221,7 +255,11 @@ project-root/
 │ │ └── artifacts/                # Trained model (.joblib)
 │ ├── temporal_analyzer.py        # Behavior change detection
 │ ├── temporal_risk_engine.py     # Risk persistence + decay
-│ ├── report.py                   # Human-readable risk table
+│ ├── report.py                   # Terminal risk table
+│ ├── dashboard/                  # Web dashboard (Flask, read-only)
+│ │ ├── app.py                    # Routes: / and /api/state
+│ │ ├── templates/index.html
+│ │ └── static/ (style.css, app.js)
 │ ├── config.py
 │ └── __init__.py
 │
@@ -251,8 +289,9 @@ project-root/
    - Applies gated persistence scoring + ML/heuristic bonuses
    - Decays risk when behavior stabilizes
 
-4. **Report**
+4. **Report / Dashboard**
    - `python -m scanner.report` prints the current risk table on demand
+   - `python -m scanner.dashboard` serves the same data as a live web page
 
 Older snapshots are pruned automatically after each analysis cycle
 (`SNAPSHOT_RETENTION_COUNT` in `config.py`) so a long-running deployment

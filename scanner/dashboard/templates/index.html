@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Keyboard Hook Behavioral Detector</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-glyph">&#8963;</span>
+      <div>
+        <h1>Keyboard Hook Behavioral Detector</h1>
+        <p class="subtitle">Capability &rarr; Behavior &rarr; Persistence risk monitor</p>
+      </div>
+    </div>
+    <div class="status">
+      <span class="dot" id="live-dot"></span>
+      <span id="last-updated">connecting&hellip;</span>
+    </div>
+  </header>
+
+  <main>
+    <section class="summary-cards">
+      <div class="card total">
+        <span class="card-value" id="card-total">&ndash;</span>
+        <span class="card-label">Tracked</span>
+      </div>
+      <div class="card high">
+        <span class="card-value" id="card-high">&ndash;</span>
+        <span class="card-label">High Risk</span>
+      </div>
+      <div class="card medium">
+        <span class="card-value" id="card-medium">&ndash;</span>
+        <span class="card-label">Medium Risk</span>
+      </div>
+      <div class="card low">
+        <span class="card-value" id="card-low">&ndash;</span>
+        <span class="card-label">Low Risk</span>
+      </div>
+    </section>
+
+    <section class="controls">
+      <input type="search" id="search" placeholder="Filter by executable path&hellip;" autocomplete="off">
+      <label class="toggle">
+        <input type="checkbox" id="hide-low">
+        Hide LOW risk
+      </label>
+    </section>
+
+    <section class="table-wrap">
+      <table id="process-table">
+        <thead>
+          <tr>
+            <th>Risk</th>
+            <th>Score</th>
+            <th>Malware ML</th>
+            <th>Keylogger API</th>
+            <th>ATT&amp;CK Signals</th>
+            <th>Executable</th>
+            <th>Last Seen</th>
+          </tr>
+        </thead>
+        <tbody id="process-body">
+          <tr><td colspan="7" class="empty">Waiting for data&hellip;</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <p class="footnote">
+      Auto-refreshes every 3s from <code>temporal_state.json</code>, written by
+      <code>main_controller.py</code>. No score shown here escalates risk on its own &mdash;
+      every HIGH/MEDIUM requires a rule-based trigger that the ML and MITRE ATT&amp;CK
+      keylogger-fingerprint layers only amplify.
+    </p>
+  </main>
+
+  <script src="{{ url_for('static', filename='app.js') }}"></script>
+</body>
+</html>

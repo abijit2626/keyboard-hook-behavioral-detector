@@ -102,7 +102,9 @@ def analyze():
                 "pid": e["pid"],
                 "exe": e["executable"],
                 "dlls": current_dlls,
-                "ml_risk_score": e.get("ml_risk_score")
+                "ml_risk_score": e.get("ml_risk_score"),
+                "keylogger_api_score": e.get("keylogger_api_score"),
+                "keylogger_apis_matched": e.get("keylogger_apis_matched")
             })
 
     logger.debug(f"Built history for {len(history)} unique process identities")
@@ -119,7 +121,9 @@ def analyze():
                 "exe": first["exe"],
                 "pid": first["pid"],
                 "time": first["time"],
-                "ml_risk_score": first.get("ml_risk_score")
+                "ml_risk_score": first.get("ml_risk_score"),
+                "keylogger_api_score": first.get("keylogger_api_score"),
+                "keylogger_apis_matched": first.get("keylogger_apis_matched")
             })
             logger.debug(f"SUSPECT_DETECTED: {first['exe']} (PID: {first['pid']})")
 
@@ -134,7 +138,9 @@ def analyze():
                     "exe": curr["exe"],
                     "pid": curr["pid"],
                     "time": curr["time"],
-                    "ml_risk_score": curr.get("ml_risk_score")
+                    "ml_risk_score": curr.get("ml_risk_score"),
+                    "keylogger_api_score": curr.get("keylogger_api_score"),
+                    "keylogger_apis_matched": curr.get("keylogger_apis_matched")
                 })
                 logger.info(f"HOOK_APPEARED: {curr['exe']} (PID: {curr['pid']})")
 
@@ -147,7 +153,9 @@ def analyze():
                     "exe": curr["exe"],
                     "pid": curr["pid"],
                     "time": curr["time"],
-                    "ml_risk_score": curr.get("ml_risk_score")
+                    "ml_risk_score": curr.get("ml_risk_score"),
+                    "keylogger_api_score": curr.get("keylogger_api_score"),
+                    "keylogger_apis_matched": curr.get("keylogger_apis_matched")
                 })
                 logger.warning(f"NEW_HOOK_MODULE: {curr['exe']} (PID: {curr['pid']}), DLLs: {new}")
 

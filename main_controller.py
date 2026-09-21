@@ -6,11 +6,12 @@ import sys
 
 from scanner.temporal_risk_engine import update_temporal_risk
 from scanner.logger_config import setup_logger
-from scanner.config import SCAN_INTERVAL, ANALYZE_EVERY
+from scanner.config import SCAN_INTERVAL, ANALYZE_EVERY, SNAPSHOT_RETENTION_COUNT
 
 SCANNER = "scanner.scanner"
 ANALYZER = "scanner.temporal_analyzer"
 EVENT_FILE = "temporal_events.json"
+SNAPSHOT_DIR = "snapshots"
 
 logger = setup_logger(__name__)
 
@@ -63,6 +64,39 @@ def clear_events():
         logger.error(f"Failed to clear events file {EVENT_FILE}: {e}")
 
 
+def prune_snapshots(keep=SNAPSHOT_RETENTION_COUNT):
+    """
+    Delete all but the `keep` most recent snapshot files.
+
+    Without this, snapshots/ grows without bound on a long-running
+    deployment, and temporal_analyzer.py rebuilds identity history from
+    every snapshot ever taken on each analysis cycle -- an unbounded,
+    ever-slower recompute of state that's already reflected in
+    temporal_state.json. Once a snapshot's events have been folded into
+    the persistent risk state, the raw snapshot isn't needed anymore
+    except as a diff baseline for the next cycle.
+    """
+    if not os.path.isdir(SNAPSHOT_DIR):
+        return
+    try:
+        files = sorted(
+            f for f in os.listdir(SNAPSHOT_DIR) if f.endswith(".json")
+        )
+    except OSError as e:
+        logger.warning(f"Failed to list {SNAPSHOT_DIR} for pruning: {e}")
+        return
+
+    stale = files[:-keep] if keep > 0 else files
+    for f in stale:
+        try:
+            os.remove(os.path.join(SNAPSHOT_DIR, f))
+        except OSError as e:
+            logger.warning(f"Failed to prune snapshot {f}: {e}")
+
+    if stale:
+        logger.debug(f"Pruned {len(stale)} old snapshot(s), kept {len(files) - len(stale)}")
+
+
 def main():
     """Main controller loop for periodic scanning and analysis."""
     logger.info("Starting keylogger detection controller")
@@ -83,6 +117,7 @@ def main():
                     logger.info(f"Processing {len(events)} temporal events")
                     state = update_temporal_risk(events)
                     clear_events()
+                    prune_snapshots()
 
                     high_risk_count = 0
                     for ident, s in state.items():

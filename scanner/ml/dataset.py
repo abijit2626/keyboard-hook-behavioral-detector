@@ -1,83 +1,39 @@
 """
-Synthetic training data for the ML risk model.
+Real training data for the ML risk model: ClaMP (Classification of
+Malware with PE headers), a public dataset of PE header features
+extracted from 5,210 real Windows executables (2,722 malware + 2,488
+benign), built by Ajit Kumar using the `pefile` library.
 
-There is no public, labeled dataset of "processes that install keyboard
-hooks, labeled benign vs. suspicious" -- and collecting one would mean
-running real malware, which this project deliberately never does (see
-README: user-mode, read-only, no keystroke capture). Instead, this module
-generates synthetic feature vectors from a documented behavioral model of
-what tends to distinguish legitimate hook users (Discord, accessibility
-tools, IME helpers, ...) from a keylogger-style process, using the exact
-same feature space the live detector extracts in scanner/ml/features.py.
+Source: https://github.com/urwithajit9/ClaMP
+        scanner/ml/data/clamp_integrated.csv (ClaMP_Integrated-5210, as
+        published in that repo's dataset/ directory)
+License: the extraction scripts state "No license required for any kind
+        of reuse. If using this script for your work, please refer this
+        on your willingness." -- credited here accordingly.
 
-This is a deliberate, disclosed simplification for an educational project.
-It is not a claim of real-world detection accuracy -- see README's
-"Machine Learning Component" section.
+Two of the original 69 columns ('packer', 'packer_type') are dropped:
+they require a PEiD signature database compiled as YARA rules that this
+project does not bundle, and the live feature extractor in
+scanner/ml/pe_features.py does not compute them. Every other column is
+real, and this loader casts each of scanner.ml.pe_features.FEATURE_NAMES
+straight out of the CSV, so the model trains on the identical feature
+space it will see at inference time.
 """
-import random
+import csv
+import os
 
-from scanner.ml.features import FEATURE_NAMES
+from scanner.ml.pe_features import FEATURE_NAMES
 
-assert FEATURE_NAMES == [
-    "is_dll_hook",
-    "num_suspicious_dlls",
-    "unsigned_dll_ratio",
-    "exe_signed",
-    "outside_program_files",
-    "path_depth",
-    "in_temp_or_appdata",
-]
+DATASET_PATH = os.path.join(os.path.dirname(__file__), "data", "clamp_integrated.csv")
+
+LABEL_COLUMN = "class"  # 0 = benign, 1 = malware (per ClaMP's own scan_file())
 
 
-def _sample_benign(rng):
-    """A well-behaved hook-capable app: signed, installed, shallow path."""
-    is_dll_hook = rng.random() < 0.3
-    num_suspicious_dlls = rng.choice([0, 0, 0, 1]) if is_dll_hook else 0
-    unsigned_dll_ratio = rng.uniform(0.0, 0.1) if num_suspicious_dlls else 0.0
-    exe_signed = 1 if rng.random() < 0.9 else 0
-    outside_program_files = 1 if rng.random() < 0.15 else 0
-    path_depth = rng.randint(3, 6)
-    in_temp_or_appdata = 1 if rng.random() < 0.05 else 0
-    return [
-        float(is_dll_hook),
-        float(num_suspicious_dlls),
-        float(unsigned_dll_ratio),
-        float(exe_signed),
-        float(outside_program_files),
-        float(path_depth),
-        float(in_temp_or_appdata),
-    ]
-
-
-def _sample_suspicious(rng):
-    """A keylogger-style process: unsigned, DLL-injected, buried in temp/appdata."""
-    is_dll_hook = rng.random() < 0.75
-    num_suspicious_dlls = rng.randint(1, 4) if is_dll_hook else 0
-    unsigned_dll_ratio = rng.uniform(0.5, 1.0) if num_suspicious_dlls else rng.uniform(0.0, 0.3)
-    exe_signed = 1 if rng.random() < 0.15 else 0
-    outside_program_files = 1 if rng.random() < 0.85 else 0
-    path_depth = rng.randint(5, 10)
-    in_temp_or_appdata = 1 if rng.random() < 0.6 else 0
-    return [
-        float(is_dll_hook),
-        float(num_suspicious_dlls),
-        float(unsigned_dll_ratio),
-        float(exe_signed),
-        float(outside_program_files),
-        float(path_depth),
-        float(in_temp_or_appdata),
-    ]
-
-
-def generate_synthetic_dataset(n_samples=2000, seed=42):
-    """Return (X, y): balanced synthetic feature vectors and 0/1 labels."""
-    rng = random.Random(seed)
+def load_dataset(csv_path=DATASET_PATH):
+    """Return (X, y): real feature vectors (FEATURE_NAMES order) and labels."""
     X, y = [], []
-    for _ in range(n_samples):
-        if rng.random() < 0.5:
-            X.append(_sample_benign(rng))
-            y.append(0)
-        else:
-            X.append(_sample_suspicious(rng))
-            y.append(1)
+    with open(csv_path, "r", encoding="utf-8", newline="") as f:
+        for row in csv.DictReader(f):
+            X.append([float(row[name]) for name in FEATURE_NAMES])
+            y.append(int(row[LABEL_COLUMN]))
     return X, y

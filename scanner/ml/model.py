@@ -8,7 +8,7 @@ import os
 
 import joblib
 
-MODEL_PATH = os.path.join(os.path.dirname(__file__), "artifacts", "hook_risk_model.joblib")
+MODEL_PATH = os.path.join(os.path.dirname(__file__), "artifacts", "clamp_pe_model.joblib")
 
 _model_cache = None
 

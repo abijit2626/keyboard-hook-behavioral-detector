@@ -72,51 +72,59 @@ A process must demonstrate **both suspicion and persistence** to escalate.
 ## Machine Learning Component
 
 Alongside the hand-tuned rule weights in `config.py`, the detector uses a
-**RandomForestClassifier** (scikit-learn) to estimate a probability that a
-hook-capable process is behaving like a keylogger, based on the same
-observable signals the rule engine already collects:
+**RandomForestClassifier** (scikit-learn) trained on a real, public dataset
+of Windows PE (executable) header features to estimate an independent
+probability that a hook-capable process's executable looks like malware.
 
-| Feature | What it captures |
-|---|---|
-| `is_dll_hook` | DLL-based hook vs. plain EXE capability |
-| `num_suspicious_dlls` | Count of non-Windows DLLs loaded |
-| `unsigned_dll_ratio` | Fraction of those DLLs lacking a valid signature |
-| `exe_signed` | Whether the executable itself is signed |
-| `outside_program_files` | Running outside a normal install location |
-| `path_depth` | How deeply nested the executable's path is |
-| `in_temp_or_appdata` | Running from a Temp/AppData-style path |
+**Dataset: [ClaMP](https://github.com/urwithajit9/ClaMP)** (Classification
+of Malware with PE headers) by Ajit Kumar — 5,210 real Windows executables
+(2,722 malware + 2,488 benign), each reduced to header-level features via
+`pefile`. It's committed at `scanner/ml/data/clamp_integrated.csv`. Its
+scripts state *"No license required for any kind of reuse"*, credited here
+accordingly.
 
-Feature extraction lives in `scanner/ml/features.py` and is shared by both
-training and inference, so the model always sees exactly what the live
-detector sees.
+**Features (67):** `scanner/ml/pe_features.py` re-implements ClaMP's own
+feature extraction (`integrated_features_extraction.py`) for modern
+Python 3, so the same code — not a lookalike — runs at both training and
+scan time. It reads, per executable:
+- Raw `IMAGE_DOS_HEADER` / `FILE_HEADER` fields (`e_cblp`, `e_lfanew`, section count, ...)
+- All 15 `FILE_HEADER.Characteristics` flag bits (DLL, executable image, stripped symbols, ...)
+- `OPTIONAL_HEADER` fields, with a few (`ImageBase`, `SectionAlignment`, `FileAlignment`, `SizeOfImage`, `SizeOfHeaders`, `LoaderFlags`) turned into the same well-formedness boolean checks ClaMP uses
+- All 11 `DllCharacteristics` flag bits (ASLR, NX, CFG, ...)
+- Per-section Shannon entropy of `.text` / `.data`, overall file entropy and size, count of non-standard ("suspicious") section names, and whether version-info resources are present
 
-**Training data is synthetic.** There is no public, labeled dataset of real
-keyboard-hook malware, and this project deliberately never runs or collects
-real malicious samples (see *Safety & Ethics* below). `scanner/ml/dataset.py`
-generates feature vectors from a documented behavioral model of "benign
-hook user" vs. "keylogger-style process" (signed & installed vs. unsigned &
-buried in Temp/AppData, etc.) so the classifier has something real to learn
-from. This is an explicit, disclosed simplification for an educational
-project — not a claim of real-world detection accuracy.
+Two of ClaMP's original 69 columns, `packer` and `packer_type`, are
+dropped: they depend on a PEiD signature database compiled as YARA rules
+that this project doesn't bundle. Everything else is computed directly
+from the file, matching ClaMP's own definitions exactly (see the
+docstring/citation in `pe_features.py` and `dataset.py` for details).
 
 **Training:**
 ```
 python train_model.py
 ```
-This trains the model on the synthetic dataset, prints accuracy / a
-classification report / feature importances, and saves the model to
-`scanner/ml/artifacts/hook_risk_model.joblib`. A pre-trained model is
-already committed, so the tool works out of the box — re-run the script
-any time to retrain.
+Trains on an 80/20 stratified split of the real dataset and prints
+accuracy, a classification report, a confusion matrix, and feature
+importances — on the current dataset this lands around **99% accuracy**
+on held-out real samples. Saves the model to
+`scanner/ml/artifacts/clamp_pe_model.joblib`. A pre-trained model is
+already committed, so the tool works out of the box — re-run any time to
+retrain.
 
 **Inference:** every suspect entry produced by `keyboard_hook_detector.py`
-is scored via `scanner/ml_classifier.py`, attaching an `ml_risk_score`
-(0.0–1.0). That score flows through `temporal_analyzer.py`'s events into
-`temporal_risk_engine.py`, where it adds an explainable bonus
-(`ML_RISK_WEIGHT_SCALE * ml_risk_score`, see `config.py`) on top of the
-rule-based event weight — it never fires on its own; a process still needs
-a rule-based trigger (e.g. `SUSPECT_DETECTED`, `NEW_HOOK_MODULE`) before the
-ML score can move its risk level.
+has its executable scored via `scanner/ml_classifier.py` (which calls
+`pe_features.extract_pe_features()` directly on the running process's exe
+on disk), attaching an `ml_risk_score` (0.0–1.0). That score flows through
+`temporal_analyzer.py`'s events into `temporal_risk_engine.py`, where it
+adds an explainable bonus (`ML_RISK_WEIGHT_SCALE * ml_risk_score`, see
+`config.py`) on top of the rule-based event weight — it never fires on its
+own; a process still needs a rule-based trigger (e.g. `SUSPECT_DETECTED`,
+`NEW_HOOK_MODULE`) before the ML score can move its risk level.
+
+This is genuine static malware analysis (real training data, real PE
+parsing), layered as one more signal in the same "capability → behavior →
+persistence" pipeline — it does not by itself decide that a process is a
+keylogger, and it never inspects keystrokes.
 
 ---
 
@@ -128,8 +136,9 @@ project-root/
 │ ├── keyboard_hook_detector.py # Capability detection + base risk
 │ ├── ml_classifier.py # ML scoring integration point
 │ ├── ml/
-│ │ ├── features.py # Shared feature extraction
-│ │ ├── dataset.py # Synthetic training data
+│ │ ├── pe_features.py # Static PE-header feature extraction
+│ │ ├── dataset.py # Loads the real ClaMP CSV
+│ │ ├── data/ # ClaMP_Integrated-5210 dataset (CSV)
 │ │ ├── model.py # Model load + inference
 │ │ └── artifacts/ # Trained model (.joblib)
 │ ├── temporal_analyzer.py # Behavior change detection

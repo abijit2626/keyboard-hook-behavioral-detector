@@ -29,6 +29,11 @@ EVENT_WEIGHTS = {
     "HOOK_REMOVED": -10
 }
 
+# --- ML Risk Model Settings ---
+# Maximum extra points an event's ML risk probability (0..1) can add to its
+# base weight above, applied as ML_RISK_WEIGHT_SCALE * ml_risk_score.
+ML_RISK_WEIGHT_SCALE = 20
+
 # --- System Settings ---
 WINDOWS_DIR = os.environ.get("WINDIR", "C:\\Windows").lower()
 ALLOWLIST = {

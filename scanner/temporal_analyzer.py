@@ -101,7 +101,8 @@ def analyze():
                 "time": snap["time"],
                 "pid": e["pid"],
                 "exe": e["executable"],
-                "dlls": current_dlls
+                "dlls": current_dlls,
+                "ml_risk_score": e.get("ml_risk_score")
             })
 
     logger.debug(f"Built history for {len(history)} unique process identities")
@@ -117,7 +118,8 @@ def analyze():
                 "identity": identity,
                 "exe": first["exe"],
                 "pid": first["pid"],
-                "time": first["time"]
+                "time": first["time"],
+                "ml_risk_score": first.get("ml_risk_score")
             })
             logger.debug(f"SUSPECT_DETECTED: {first['exe']} (PID: {first['pid']})")
 
@@ -131,7 +133,8 @@ def analyze():
                     "identity": identity,
                     "exe": curr["exe"],
                     "pid": curr["pid"],
-                    "time": curr["time"]
+                    "time": curr["time"],
+                    "ml_risk_score": curr.get("ml_risk_score")
                 })
                 logger.info(f"HOOK_APPEARED: {curr['exe']} (PID: {curr['pid']})")
 
@@ -143,7 +146,8 @@ def analyze():
                     "identity": identity,
                     "exe": curr["exe"],
                     "pid": curr["pid"],
-                    "time": curr["time"]
+                    "time": curr["time"],
+                    "ml_risk_score": curr.get("ml_risk_score")
                 })
                 logger.warning(f"NEW_HOOK_MODULE: {curr['exe']} (PID: {curr['pid']}), DLLs: {new}")
 

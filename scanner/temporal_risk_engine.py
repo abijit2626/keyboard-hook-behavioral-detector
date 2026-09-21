@@ -4,7 +4,8 @@ import os
 
 from scanner.logger_config import setup_logger
 from scanner.config import (
-    EVENT_WEIGHTS, RISK_DECAY, RISK_MEDIUM_THRESHOLD, RISK_HIGH_THRESHOLD, ALLOWLIST
+    EVENT_WEIGHTS, RISK_DECAY, RISK_MEDIUM_THRESHOLD, RISK_HIGH_THRESHOLD, ALLOWLIST,
+    ML_RISK_WEIGHT_SCALE
 )
 
 STATE_FILE = "temporal_state.json"
@@ -139,6 +140,9 @@ def update_temporal_risk(events):
         s["event_counts"][etype] = s["event_counts"].get(etype, 0) + 1
         import os.path
         base = os.path.basename(s["exe"]).lower()
+        ml_score = e.get("ml_risk_score")
+        if ml_score is not None:
+            s["ml_risk_score"] = ml_score
         if base in ALLOWLIST:
             weight = 0
         else:
@@ -147,12 +151,16 @@ def update_temporal_risk(events):
             has_base = s["event_counts"].get("SUSPECT_DETECTED", 0) > 0 or s["risk_score"] > 0
             if gated and not has_base:
                 weight = 0
+            elif weight > 0 and ml_score is not None:
+                # ML model contributes an additional, explainable bonus on top
+                # of the rule-based weight for events that already carry risk.
+                weight += round(ml_score * ML_RISK_WEIGHT_SCALE)
         s["risk_score"] += weight
         s["last_seen"] = now
-        
+
         logger.debug(
             f"Event {etype} for {identity}: "
-            f"score {old_score} -> {s['risk_score']} (weight: {weight})"
+            f"score {old_score} -> {s['risk_score']} (weight: {weight}, ml_risk_score: {ml_score})"
         )
 
     # Apply decay and classification to ALL identities

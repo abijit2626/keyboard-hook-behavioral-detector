@@ -7,6 +7,7 @@ from functools import lru_cache
 
 from scanner.logger_config import setup_logger
 from scanner.config import WINDOWS_DIR, ALLOWLIST
+from scanner.ml_classifier import score_entry
 
 logger = setup_logger(__name__)
 
@@ -128,6 +129,11 @@ def detect_keyboard_hook_suspects():
                 entry["signed"] = is_signed(exe)
                 entry["hash"] = sha256(exe)
                 logger.debug(f"EXE_HOOK_SUSPECT: {exe} (PID: {pid})")
+
+            ml_score = score_entry(entry)
+            if ml_score is not None:
+                entry["ml_risk_score"] = round(ml_score, 4)
+                logger.debug(f"ML risk score for {exe} (PID: {pid}): {ml_score:.4f}")
 
             suspects.append(entry)
             processed_count += 1

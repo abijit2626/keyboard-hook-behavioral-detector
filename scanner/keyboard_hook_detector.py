@@ -8,6 +8,7 @@ from functools import lru_cache
 from scanner.logger_config import setup_logger
 from scanner.config import WINDOWS_DIR, ALLOWLIST
 from scanner.ml_classifier import score_entry
+from scanner.ml.keylogger_signatures import extract_keylogger_signals
 
 logger = setup_logger(__name__)
 
@@ -134,6 +135,19 @@ def detect_keyboard_hook_suspects():
             if ml_score is not None:
                 entry["ml_risk_score"] = round(ml_score, 4)
                 logger.debug(f"ML risk score for {exe} (PID: {pid}): {ml_score:.4f}")
+
+            keylogger_signals = extract_keylogger_signals(exe)
+            if keylogger_signals is not None:
+                entry["keylogger_api_score"] = keylogger_signals["score"]
+                entry["keylogger_apis_matched"] = [
+                    cat["name"] for cat in keylogger_signals["matched_categories"]
+                ]
+                if keylogger_signals["matched_categories"]:
+                    logger.debug(
+                        f"Keylogger API fingerprint for {exe} (PID: {pid}): "
+                        f"{keylogger_signals['score']:.4f} "
+                        f"({entry['keylogger_apis_matched']})"
+                    )
 
             suspects.append(entry)
             processed_count += 1

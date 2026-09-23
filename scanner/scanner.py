@@ -1,11 +1,6 @@
 import os
-import sys
 import json
 from datetime import datetime, UTC
-
-if os.name != "nt":
-    print("[!] Windows only.")
-    sys.exit(1)
 
 from scanner.keyboard_hook_detector import detect_keyboard_hook_suspects
 from scanner.logger_config import setup_logger
@@ -15,8 +10,12 @@ logger = setup_logger(__name__)
 
 def main():
     """Perform a single scan cycle and save snapshot."""
+    if os.name != "nt":
+        logger.error("Windows only.")
+        return
+
     logger.info("Starting keyboard hook detection scan")
-    
+
     try:
         os.makedirs("snapshots", exist_ok=True)
         logger.debug("Snapshots directory ready")

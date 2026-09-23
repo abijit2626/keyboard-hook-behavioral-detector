@@ -244,9 +244,10 @@ already decided, it never re-scores anything client-side.
 project-root/
 ├── scanner/
 │ ├── scanner.py                  # Single scan cycle (snapshot)
-│ ├── keyboard_hook_detector.py   # Capability detection + ML/heuristic scoring
-│ ├── ml_classifier.py            # Malware-ML integration point
+│ ├── keyboard_hook_detector.py   # Capability detection + signature checks
+│ ├── win_authenticode.py         # Authenticode signature check (WinVerifyTrust, no subprocess)
 │ ├── ml/
+│ │ ├── analysis.py               # Shared entry point: one PE parse, both ML/heuristic layers, cached
 │ │ ├── pe_features.py            # Static PE-header feature extraction
 │ │ ├── keylogger_signatures.py   # MITRE ATT&CK API fingerprinting
 │ │ ├── dataset.py                # Loads the real ClaMP CSV
@@ -296,6 +297,26 @@ project-root/
 Older snapshots are pruned automatically after each analysis cycle
 (`SNAPSHOT_RETENTION_COUNT` in `config.py`) so a long-running deployment
 doesn't accumulate an unbounded history on disk.
+
+---
+
+## Performance
+
+An earlier version of this pipeline was slow enough per cycle to notice.
+The cause wasn't Python itself — it was a handful of specific, fixable
+costs being paid repeatedly:
+
+| Cost | Fix |
+|---|---|
+| Signature checks shelled out to `powershell.exe` per file (100ms–1s+ startup each, plus a possible network revocation check) | `win_authenticode.py` calls `WinVerifyTrust` directly via `ctypes` — no subprocess, no network round trip (`WTD_REVOKE_NONE`) |
+| `main_controller.py` spawned a fresh `python -m scanner.scanner` subprocess every `SCAN_INTERVAL` — cold-importing scikit-learn/pefile and reloading the trained model from disk (~1s) on every cycle | `main_controller.py` now calls `scanner.scanner.main()` / `scanner.temporal_analyzer.analyze()` in-process, so the model and imports stay warm for the life of the process |
+| The malware-ML and keylogger-fingerprint layers each independently opened and parsed the same PE file | `scanner/ml/analysis.py` opens and parses it once, shares the same `pefile.PE` object with both |
+| A process still running on the next cycle got fully re-analyzed (PE parse, entropy, import scan) from scratch | `analyze_executable()` is cached per executable path (`functools.lru_cache`) |
+
+Net effect, measured in this repo: once the model is warm, scoring one
+executable (PE parse + both ML/heuristic layers) takes **~75ms**; a
+repeat of the same path is **sub-millisecond** (cache hit). The ~1s
+model-load cost now happens once at startup instead of every cycle.
 
 ---
 

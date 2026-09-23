@@ -1,38 +1,15 @@
 import psutil
 import os
 import hashlib
-import subprocess
 import time
 from functools import lru_cache
 
 from scanner.logger_config import setup_logger
 from scanner.config import WINDOWS_DIR, ALLOWLIST
-from scanner.ml_classifier import score_entry
-from scanner.ml.keylogger_signatures import extract_keylogger_signals
+from scanner.ml.analysis import analyze_executable
+from scanner.win_authenticode import is_signed
 
 logger = setup_logger(__name__)
-
-
-@lru_cache(maxsize=1024)
-def is_signed(path):
-    """Check if a file has a valid digital signature."""
-    try:
-        # Use -LiteralPath to safely handle paths with special characters
-        # Escape single quotes for PowerShell by doubling them
-        escaped_path = path.replace("'", "''")
-        out = subprocess.check_output(
-            ["powershell", "-Command",
-             f"(Get-AuthenticodeSignature -LiteralPath '{escaped_path}').Status"],
-            stderr=subprocess.DEVNULL,
-            timeout=5  # 5 second timeout
-        ).decode('utf-8', errors='replace')
-        return "Valid" in out
-    except subprocess.TimeoutExpired:
-        logger.warning(f"Signature check timed out for {path}")
-        return False
-    except Exception as e:
-        logger.debug(f"Failed to check signature for {path}: {e}")
-        return False
 
 
 @lru_cache(maxsize=2048)
@@ -131,22 +108,18 @@ def detect_keyboard_hook_suspects():
                 entry["hash"] = sha256(exe)
                 logger.debug(f"EXE_HOOK_SUSPECT: {exe} (PID: {pid})")
 
-            ml_score = score_entry(entry)
-            if ml_score is not None:
-                entry["ml_risk_score"] = round(ml_score, 4)
-                logger.debug(f"ML risk score for {exe} (PID: {pid}): {ml_score:.4f}")
-
-            keylogger_signals = extract_keylogger_signals(exe)
-            if keylogger_signals is not None:
-                entry["keylogger_api_score"] = keylogger_signals["score"]
-                entry["keylogger_apis_matched"] = [
-                    cat["name"] for cat in keylogger_signals["matched_categories"]
-                ]
-                if keylogger_signals["matched_categories"]:
+            analysis = analyze_executable(exe)
+            if analysis["ml_risk_score"] is not None:
+                entry["ml_risk_score"] = round(analysis["ml_risk_score"], 4)
+                logger.debug(f"ML risk score for {exe} (PID: {pid}): {entry['ml_risk_score']:.4f}")
+            if analysis["keylogger_api_score"] is not None:
+                entry["keylogger_api_score"] = analysis["keylogger_api_score"]
+                entry["keylogger_apis_matched"] = analysis["keylogger_apis_matched"]
+                if analysis["keylogger_apis_matched"]:
                     logger.debug(
                         f"Keylogger API fingerprint for {exe} (PID: {pid}): "
-                        f"{keylogger_signals['score']:.4f} "
-                        f"({entry['keylogger_apis_matched']})"
+                        f"{analysis['keylogger_api_score']:.4f} "
+                        f"({analysis['keylogger_apis_matched']})"
                     )
 
             suspects.append(entry)

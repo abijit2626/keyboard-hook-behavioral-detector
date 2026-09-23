@@ -114,9 +114,17 @@ def _text_data_entropy(pe):
     return text_entropy, data_entropy
 
 
-def _file_size_and_entropy(filepath):
-    with open(filepath, "rb") as f:
-        data = f.read()
+def _file_size_and_entropy(pe, filepath):
+    """
+    Whole-file size + Shannon entropy. Reuses the bytes pefile already
+    read into `pe.__data__` (an mmap, verified to match the file exactly)
+    instead of a second full read of the file from disk -- filepath is
+    only a fallback for when a raw pe object isn't available.
+    """
+    data = getattr(pe, "__data__", None)
+    if data is None:
+        with open(filepath, "rb") as f:
+            data = f.read()
     size = len(data)
     if size == 0:
         return 0, 0.0
@@ -136,21 +144,15 @@ def _has_version_info(pe):
         return 0
 
 
-def extract_pe_features(filepath):
+def extract_features_from_pe(pe, filepath=None):
     """
-    Extract the 67-element ClaMP-compatible feature vector for a PE file.
+    Extract the 67-element ClaMP-compatible feature vector from an
+    already-open `pefile.PE` instance (RESOURCE directory must already be
+    parsed -- see scanner/ml/analysis.py, which shares one `pe` across
+    both ML layers instead of parsing the file twice).
 
-    Returns a list[float] in FEATURE_NAMES order, or None if the file
-    cannot be parsed as a PE (e.g. not an executable/DLL, or unreadable).
+    Returns a list[float] in FEATURE_NAMES order, or None on failure.
     """
-    try:
-        pe = pefile.PE(filepath, fast_load=True)
-        pe.parse_data_directories(
-            directories=[pefile.DIRECTORY_ENTRY["IMAGE_DIRECTORY_ENTRY_RESOURCE"]]
-        )
-    except Exception:
-        return None
-
     try:
         dos = [
             pe.DOS_HEADER.e_cblp, pe.DOS_HEADER.e_cp, pe.DOS_HEADER.e_cparhdr,
@@ -193,7 +195,7 @@ def extract_pe_features(filepath):
 
         sus, non_sus = _suspicious_section_counts(pe)
         text_entropy, data_entropy = _text_data_entropy(pe)
-        filesize, file_entropy = _file_size_and_entropy(filepath)
+        filesize, file_entropy = _file_size_and_entropy(pe, filepath)
         fileinfo = _has_version_info(pe)
 
         return [float(v) for v in (
@@ -202,5 +204,24 @@ def extract_pe_features(filepath):
         )]
     except Exception:
         return None
+
+
+def extract_pe_features(filepath):
+    """
+    Standalone convenience wrapper: open `filepath`, parse the RESOURCE
+    directory, extract features, close. For callers that don't already
+    have an open `pe` object (training/debugging use); the live scan
+    path uses scanner/ml/analysis.py instead, which shares one `pe`
+    across both ML layers.
+    """
+    try:
+        pe = pefile.PE(filepath, fast_load=True)
+        pe.parse_data_directories(
+            directories=[pefile.DIRECTORY_ENTRY["IMAGE_DIRECTORY_ENTRY_RESOURCE"]]
+        )
+    except Exception:
+        return None
+    try:
+        return extract_features_from_pe(pe, filepath)
     finally:
         pe.close()

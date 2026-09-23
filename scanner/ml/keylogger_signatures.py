@@ -1,7 +1,7 @@
 """
 Keylogger-specific capability fingerprinting.
 
-scanner.ml.pe_features / scanner.ml_classifier answer "does this file's PE
+scanner.ml.pe_features / scanner.ml.analysis answer "does this file's PE
 structure look like malware in general" (trained on the real ClaMP
 dataset). That question is deliberately generic -- there is no public,
 labeled dataset of "PE files, tagged keylogger-vs-not" to train a second
@@ -112,13 +112,6 @@ _MAX_SCORE = sum(cat["weight"] for cat in _SIGNATURE_CATEGORIES)
 def _imported_api_names(pe):
     """Set of imported function names (ANSI/Unicode variants included)."""
     names = set()
-    try:
-        pe.parse_data_directories(
-            directories=[pefile.DIRECTORY_ENTRY["IMAGE_DIRECTORY_ENTRY_IMPORT"]]
-        )
-    except Exception:
-        return names
-
     for entry in getattr(pe, "DIRECTORY_ENTRY_IMPORT", []):
         for imp in entry.imports:
             if imp.name:
@@ -126,23 +119,20 @@ def _imported_api_names(pe):
     return names
 
 
-def extract_keylogger_signals(filepath):
+def score_from_pe(pe):
     """
-    Score a PE file's import table against known input-capture API
-    signatures.
+    Score an already-open `pefile.PE` instance's import table (IMPORT
+    directory must already be parsed -- see scanner/ml/analysis.py, which
+    shares one `pe` across both ML layers instead of parsing the file
+    twice).
 
     Returns a dict:
         {
             "score": float in [0, 1],
             "matched_categories": [{"name", "technique", "weight", "apis": [...]}]
         }
-    or None if the file couldn't be parsed as a PE.
+    or None on failure.
     """
-    try:
-        pe = pefile.PE(filepath, fast_load=True)
-    except Exception:
-        return None
-
     try:
         imported = _imported_api_names(pe)
 
@@ -165,5 +155,22 @@ def extract_keylogger_signals(filepath):
         }
     except Exception:
         return None
+
+
+def extract_keylogger_signals(filepath):
+    """
+    Standalone convenience wrapper: open `filepath`, parse the IMPORT
+    directory, score, close. For callers that don't already have an open
+    `pe` object; the live scan path uses scanner/ml/analysis.py instead.
+    """
+    try:
+        pe = pefile.PE(filepath, fast_load=True)
+        pe.parse_data_directories(
+            directories=[pefile.DIRECTORY_ENTRY["IMAGE_DIRECTORY_ENTRY_IMPORT"]]
+        )
+    except Exception:
+        return None
+    try:
+        return score_from_pe(pe)
     finally:
         pe.close()

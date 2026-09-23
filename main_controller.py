@@ -1,42 +1,42 @@
-import subprocess
 import time
 import json
 import os
-import sys
 
+from scanner import scanner as scanner_module
+from scanner import temporal_analyzer as analyzer_module
 from scanner.temporal_risk_engine import update_temporal_risk
 from scanner.logger_config import setup_logger
 from scanner.config import SCAN_INTERVAL, ANALYZE_EVERY, SNAPSHOT_RETENTION_COUNT
 
-SCANNER = "scanner.scanner"
-ANALYZER = "scanner.temporal_analyzer"
 EVENT_FILE = "temporal_events.json"
 SNAPSHOT_DIR = "snapshots"
 
 logger = setup_logger(__name__)
 
 
+def run_scan():
+    """
+    Run one scan cycle in-process (not as a subprocess).
 
-def run(module):
-    """Run a module as a subprocess and log the results."""
-    logger.debug(f"Running module: {module}")
-    result = subprocess.run(
-        [sys.executable, "-m", module],
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        text=True
-    )
-    
-    if result.returncode != 0:
-        logger.error(f"Module {module} failed with return code {result.returncode}")
-        if result.stderr:
-            logger.error(f"Error output: {result.stderr}")
-    else:
-        logger.debug(f"Module {module} completed successfully")
-        if result.stdout:
-            logger.debug(f"Output: {result.stdout}")
-    
-    return result
+    A subprocess-per-cycle used to cold-import scikit-learn/pefile/joblib
+    and reload the trained model from disk every SCAN_INTERVAL seconds --
+    a large, avoidable cost paid on a loop. Calling scanner.scanner.main()
+    directly keeps this interpreter warm, so the ML model (cached at
+    module level in scanner/ml/model.py) and the analyze_executable()
+    cache (scanner/ml/analysis.py) actually help across cycles.
+    """
+    try:
+        scanner_module.main()
+    except Exception as e:
+        logger.error(f"Scan cycle failed: {e}", exc_info=True)
+
+
+def run_analysis():
+    """Run one temporal analysis cycle in-process."""
+    try:
+        analyzer_module.analyze()
+    except Exception as e:
+        logger.error(f"Temporal analysis failed: {e}", exc_info=True)
 
 
 def load_events():
@@ -106,12 +106,12 @@ def main():
     try:
         while True:
             logger.info(f"Starting scan cycle #{count + 1}")
-            run(SCANNER)
+            run_scan()
             count += 1
 
             if count % ANALYZE_EVERY == 0:
                 logger.info(f"Running temporal analysis (every {ANALYZE_EVERY} scans)")
-                run(ANALYZER)
+                run_analysis()
                 events = load_events()
                 if events:
                     logger.info(f"Processing {len(events)} temporal events")

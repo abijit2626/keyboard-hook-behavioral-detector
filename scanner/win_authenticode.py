@@ -19,6 +19,21 @@ the hood, invoked directly with no subprocess and no network round trip:
 
 Results are cached per path (functools.lru_cache), same convention as
 sha256() in scanner/keyboard_hook_detector.py.
+
+Known limitation: this checks embedded Authenticode signatures only
+(WTD_CHOICE_FILE). It does not resolve catalog-only signatures -- the
+mechanism most core Windows OS binaries use instead of embedding a
+signature directly in the file (their signature lives in a separate
+.cat catalog under System32\\CatRoot; verifying one means hashing the
+file and looking that hash up via CryptCATAdmin*, then re-verifying
+against the matching catalog with WTD_CHOICE_CATALOG -- notably more
+code, for a case this project doesn't actually hit). That's fine here:
+scanner/keyboard_hook_detector.py never calls is_signed() on anything
+under WINDOWS_DIR in the first place (system binaries are filtered out
+before reaching this check), and the third-party DLLs/EXEs it does check
+are overwhelmingly embedded-signed -- catalog signing is essentially
+Microsoft's own internal mechanism for OS components, not something
+ordinary ISV software uses.
 """
 import ctypes
 from ctypes import wintypes

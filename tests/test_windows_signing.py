@@ -19,20 +19,31 @@ pytestmark = pytest.mark.skipif(
 
 NOTEPAD = r"C:\Windows\System32\notepad.exe"
 
+# A real, embedded-Authenticode-signed executable outside WINDOWS_DIR --
+# what is_signed() actually gets called on in this codebase (see
+# scanner/win_authenticode.py's module docstring: core Windows binaries
+# like notepad.exe are catalog-signed, not embedded-signed, and
+# keyboard_hook_detector.py never calls is_signed() on anything under
+# WINDOWS_DIR anyway). PowerShell 7 ships on every windows-latest runner
+# under Program Files, installed as standalone software rather than
+# baked into the OS image, so it's embedded-signed like the third-party
+# DLLs/EXEs this function is actually meant to check.
+SIGNED_THIRD_PARTY_BINARY = r"C:\Program Files\PowerShell\7\pwsh.exe"
 
-def test_notepad_is_reported_as_validly_signed():
+
+def test_signed_third_party_binary_is_reported_as_validly_signed():
     from scanner.win_authenticode import _ERROR_SUCCESS, _verify_trust, is_signed
 
     # Reach into the raw WinVerifyTrust result (not just is_signed()'s bool)
     # so a failure here names the actual error code instead of just False --
     # this is the one place that can prove or disprove the ctypes struct
     # layout in scanner/win_authenticode.py against the real Win32 API.
-    code = _verify_trust(NOTEPAD)
+    code = _verify_trust(SIGNED_THIRD_PARTY_BINARY)
     assert code == _ERROR_SUCCESS, (
-        f"WinVerifyTrust returned 0x{code & 0xFFFFFFFF:08X} for {NOTEPAD} "
+        f"WinVerifyTrust returned 0x{code & 0xFFFFFFFF:08X} for {SIGNED_THIRD_PARTY_BINARY} "
         f"(expected 0x00000000 / ERROR_SUCCESS)"
     )
-    assert is_signed(NOTEPAD) is True
+    assert is_signed(SIGNED_THIRD_PARTY_BINARY) is True
 
 
 def test_is_signed_returns_false_not_an_exception_for_missing_file():

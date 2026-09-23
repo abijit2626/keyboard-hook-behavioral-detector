@@ -21,7 +21,17 @@ NOTEPAD = r"C:\Windows\System32\notepad.exe"
 
 
 def test_notepad_is_reported_as_validly_signed():
-    from scanner.win_authenticode import is_signed
+    from scanner.win_authenticode import _ERROR_SUCCESS, _verify_trust, is_signed
+
+    # Reach into the raw WinVerifyTrust result (not just is_signed()'s bool)
+    # so a failure here names the actual error code instead of just False --
+    # this is the one place that can prove or disprove the ctypes struct
+    # layout in scanner/win_authenticode.py against the real Win32 API.
+    code = _verify_trust(NOTEPAD)
+    assert code == _ERROR_SUCCESS, (
+        f"WinVerifyTrust returned 0x{code & 0xFFFFFFFF:08X} for {NOTEPAD} "
+        f"(expected 0x00000000 / ERROR_SUCCESS)"
+    )
     assert is_signed(NOTEPAD) is True
 
 

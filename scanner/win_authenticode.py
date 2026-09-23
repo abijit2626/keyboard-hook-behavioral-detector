@@ -84,7 +84,14 @@ def _action_guid():
 
 
 def _verify_trust(path):
-    """One WinVerifyTrust call for `path`. True if it reports a valid, trusted signature."""
+    """
+    One WinVerifyTrust call for `path`. Returns the raw LONG result code
+    (0 / _ERROR_SUCCESS means a valid, trusted signature; any other value
+    is a specific WinVerifyTrust/CryptoAPI error, e.g. TRUST_E_NOSIGNATURE
+    0x800B0100, TRUST_E_SUBJECT_NOT_TRUSTED 0x800B0004, CERT_E_UNTRUSTEDROOT
+    0x800B0109 -- kept as a raw code rather than a bool so failures are
+    diagnosable instead of just "False").
+    """
     wintrust = ctypes.WinDLL("wintrust.dll")
     wintrust.WinVerifyTrust.restype = wintypes.LONG
     wintrust.WinVerifyTrust.argtypes = [
@@ -112,14 +119,17 @@ def _verify_trust(path):
     data.dwStateAction = _WTD_STATEACTION_CLOSE
     wintrust.WinVerifyTrust(None, ctypes.byref(guid), ctypes.byref(data))
 
-    return result == _ERROR_SUCCESS
+    return result
 
 
 @lru_cache(maxsize=1024)
 def is_signed(path):
     """Check whether a file has a valid, chain-trusted Authenticode signature."""
     try:
-        return _verify_trust(path)
+        result = _verify_trust(path)
+        if result != _ERROR_SUCCESS:
+            logger.debug(f"WinVerifyTrust for {path}: 0x{result & 0xFFFFFFFF:08X}")
+        return result == _ERROR_SUCCESS
     except Exception as e:
         logger.debug(f"Signature check failed for {path}: {e}")
         return False

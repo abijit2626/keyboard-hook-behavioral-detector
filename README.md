@@ -1,5 +1,7 @@
 # Keyboard Hook Behavioral Detector (Windows)
 
+[![CI](https://github.com/abijit2626/keyboard-hook-behavioral-detector/actions/workflows/ci.yml/badge.svg)](https://github.com/abijit2626/keyboard-hook-behavioral-detector/actions/workflows/ci.yml)
+
 A **Windows user-mode behavioral monitoring tool** that identifies processes
 capable of installing keyboard hooks and evaluates their risk **over time**,
 using contextual, temporal, and machine-learning signals layered on top of
@@ -268,6 +270,8 @@ project-root/
 ├── temporal_state.json           # Persistent risk memory
 ├── train_model.py                # ML training script
 ├── main_controller.py            # Scheduler / orchestrator
+├── tests/                        # pytest suite (Windows-only tests auto-skip elsewhere)
+├── .github/workflows/ci.yml      # Import check, ML training gate, tests (Ubuntu + Windows)
 └── README.md
 ```
 
@@ -317,6 +321,28 @@ Net effect, measured in this repo: once the model is warm, scoring one
 executable (PE parse + both ML/heuristic layers) takes **~75ms**; a
 repeat of the same path is **sub-millisecond** (cache hit). The ~1s
 model-load cost now happens once at startup instead of every cycle.
+
+---
+
+## Development / Tests
+
+```bash
+pip install -r requirements-dev.txt
+pytest -v
+```
+
+`tests/` covers the OS-independent logic directly — real dataset loading,
+the risk-engine's gating/decay/allowlist/ML-bonus math, the keylogger
+signature weighting, and the report table — without needing Windows.
+`tests/test_windows_signing.py` is Windows-only (auto-skipped elsewhere)
+and is the one place that exercises the real `WinVerifyTrust` call and
+live PE scoring against actual system binaries (`notepad.exe`) rather
+than mocks.
+
+CI (`.github/workflows/ci.yml`) runs on every push/PR to `main`: an
+import/syntax check, a retrain-and-validate pass against the real ClaMP
+dataset (fails if accuracy drops below 90%), the cross-platform test
+suite on Ubuntu, and the Windows-only suite on a `windows-latest` runner.
 
 ---
 

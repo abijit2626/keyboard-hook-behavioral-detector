@@ -47,9 +47,9 @@ LOW   11     5%          2%             -                                 C:\Pro
 ```
 
 `python -m scanner.dashboard` serves the same data as a dark, auto-refreshing
-web page — summary cards, color-coded risk badges, per-process ML/ATT&CK
-score bars, a search box, and a "hide LOW risk" toggle. See *Web Dashboard*
-below.
+web page — a sidebar with Overview / Processes / About sections, live-updating
+stat tiles, a sortable and filterable risk table, and per-process ML/ATT&CK
+score bars. See *Web Dashboard* below.
 
 ---
 
@@ -227,10 +227,11 @@ scanner/analyzer/risk-engine pipeline, so it's safe to leave running
 alongside `main_controller.py` on Windows, or point at a copy of the state
 file from any OS to review results afterward.
 
-- **Summary cards** — total tracked, HIGH / MEDIUM / LOW counts
-- **Per-process row** — risk badge, score, malware-ML % bar, keylogger-API % bar, matched ATT&CK technique tags, executable path, last-seen (relative time)
-- **Live** — polls `/api/state` every 3s and re-renders in place, no page reload
-- **Search + filter** — filter by executable path, or hide LOW-risk rows to cut noise
+- **Sidebar shell** — Overview / Processes / About, with scroll-spy nav highlighting; collapses to a hamburger-triggered overlay below 760px
+- **Stat tiles** — total tracked, HIGH / MEDIUM / LOW counts, each with its own status-colored accent
+- **Process table** — risk badge, score (click-to-sort), malware-ML % bar, keylogger-API % bar, matched ATT&CK technique tags, executable path, last-seen (relative time); a colored left-edge bar marks each row's risk level
+- **Live** — polls `/api/state` every 3s and re-renders in place, no page reload; a manual refresh button and a live/stale status pill in the top bar
+- **Search + segmented risk filter** (All / High / Medium / Low), with a proper empty state for "no data yet" vs. "nothing matches this filter"
 - Binds to `127.0.0.1` by default — deliberately local-only. This tool's own
   telemetry (which processes look suspicious, on which machine) is itself
   sensitive; it doesn't go on the network without an explicit `--host` flag.
@@ -335,9 +336,12 @@ pytest -v
 the risk-engine's gating/decay/allowlist/ML-bonus math, the keylogger
 signature weighting, and the report table — without needing Windows.
 `tests/test_windows_signing.py` is Windows-only (auto-skipped elsewhere)
-and is the one place that exercises the real `WinVerifyTrust` call and
-live PE scoring against actual system binaries (`notepad.exe`) rather
-than mocks.
+and is the one place that exercises real binaries rather than mocks: the
+`WinVerifyTrust` signature check against an embedded-signed third-party
+executable (`pwsh.exe` — see `win_authenticode.py`'s docstring for why
+a core Windows binary like `notepad.exe` wouldn't be representative
+there), and live PE scoring / full detector-cycle tests against
+`notepad.exe`.
 
 CI (`.github/workflows/ci.yml`) runs on every push/PR to `main`: an
 import/syntax check, a retrain-and-validate pass against the real ClaMP

@@ -36,6 +36,22 @@ import pefile
 # Weight reflects how specific/damning that API is to input-capture
 # malware on its own -- a low-level keyboard hook is far more telling
 # than, say, a registry write, which plenty of benign installers do too.
+#
+# These weights were recalibrated after real-world testing flagged
+# legitimate game-overlay software (e.g. NVIDIA's GeForce overlay, whose
+# Alt+Z hotkey and ShadowPlay recording features genuinely use hooking,
+# key-state polling, raw input, and screen/clipboard capture) as HIGH
+# risk. That's not a bug in the import matching -- that software really
+# does call these APIs -- it's a lesson about which categories are
+# actually specific to keylogging versus just common in any full-featured
+# Windows app with hotkeys or capture features. `low_level_hook` stays
+# the dominant weight since it's still the single most telling API on its
+# own; the rest were brought down substantially, and `sandbox_evasion` in
+# particular (Sleep/GetTickCount/QueryPerformanceCounter -- used by
+# essentially every game, overlay, or animation loop for frame timing,
+# not just malware evading sandboxes) was cut to near-zero: it was never
+# a good signal in isolation, and including it near its original weight
+# was a design mistake, not a considered tradeoff.
 _SIGNATURE_CATEGORIES = [
     {
         "name": "low_level_hook",
@@ -49,31 +65,31 @@ _SIGNATURE_CATEGORIES = [
     {
         "name": "keystate_polling",
         "technique": "T1056.001",
-        "weight": 0.25,
+        "weight": 0.18,
         "apis": {"GetAsyncKeyState", "GetKeyState", "GetKeyboardState"},
     },
     {
         "name": "raw_input_capture",
         "technique": "T1056.001",
-        "weight": 0.20,
+        "weight": 0.12,
         "apis": {"RegisterRawInputDevices", "GetRawInputData"},
     },
     {
         "name": "screen_capture",
         "technique": "T1113",
-        "weight": 0.10,
+        "weight": 0.05,
         "apis": {"BitBlt", "CreateCompatibleBitmap", "GetDIBits"},
     },
     {
         "name": "clipboard_capture",
         "technique": "T1115",
-        "weight": 0.08,
+        "weight": 0.04,
         "apis": {"GetClipboardData", "OpenClipboard", "SetClipboardViewer"},
     },
     {
         "name": "window_tracking",
         "technique": "T1056.001",
-        "weight": 0.05,
+        "weight": 0.02,
         "apis": {"GetForegroundWindow", "GetWindowTextA", "GetWindowTextW"},
     },
     {
@@ -94,13 +110,13 @@ _SIGNATURE_CATEGORIES = [
     {
         "name": "anti_debug",
         "technique": "T1622",
-        "weight": 0.05,
+        "weight": 0.02,
         "apis": {"IsDebuggerPresent", "CheckRemoteDebuggerPresent", "NtQueryInformationProcess"},
     },
     {
         "name": "sandbox_evasion",
         "technique": "T1497",
-        "weight": 0.05,
+        "weight": 0.01,
         "apis": {"GetTickCount", "GetTickCount64", "Sleep", "QueryPerformanceCounter"},
     },
 ]

@@ -5,7 +5,7 @@ import os
 from scanner.logger_config import setup_logger
 from scanner.config import (
     EVENT_WEIGHTS, RISK_DECAY, RISK_MEDIUM_THRESHOLD, RISK_HIGH_THRESHOLD, ALLOWLIST,
-    ML_RISK_WEIGHT_SCALE, KEYLOGGER_API_WEIGHT_SCALE
+    ML_RISK_WEIGHT_SCALE, KEYLOGGER_API_WEIGHT_SCALE, RISK_SCORE_CAP
 )
 
 STATE_FILE = "temporal_state.json"
@@ -161,7 +161,7 @@ def update_temporal_risk(events):
                     weight += round(ml_score * ML_RISK_WEIGHT_SCALE)
                 if weight > 0 and keylogger_score is not None:
                     weight += round(keylogger_score * KEYLOGGER_API_WEIGHT_SCALE)
-        s["risk_score"] += weight
+        s["risk_score"] = min(RISK_SCORE_CAP, s["risk_score"] + weight)
         s["last_seen"] = now
 
         logger.debug(
@@ -178,7 +178,7 @@ def update_temporal_risk(events):
         
         # Apply standard decay to everyone
         # We assume this function is called once per analysis cycle
-        s["risk_score"] = max(0, s["risk_score"] - RISK_DECAY)
+        s["risk_score"] = max(0, min(RISK_SCORE_CAP, s["risk_score"] - RISK_DECAY))
         s["last_seen"] = now
 
         # Update risk level classification

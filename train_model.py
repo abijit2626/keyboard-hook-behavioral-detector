@@ -9,7 +9,7 @@ real dataset of PE header features extracted from 5,210 actual Windows
 executables (2,722 malware + 2,488 benign) -- see scanner/ml/dataset.py
 for provenance and scanner/ml/pe_features.py for the matching live feature
 extractor. Prints evaluation metrics and saves the model to
-scanner/ml/artifacts/clamp_pe_model.joblib for scanner.ml_classifier to
+scanner/ml/artifacts/clamp_pe_model.joblib for scanner.ml.analysis to
 load at scan time.
 """
 import os

@@ -1,0 +1,82 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  import-check:
+    name: Syntax & import check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+      - name: Compile-check every module
+        run: python -m compileall -q scanner main_controller.py train_model.py
+      - name: Import every module
+        run: |
+          python -c "
+          import importlib
+          modules = [
+              'scanner.scanner', 'scanner.keyboard_hook_detector', 'scanner.win_authenticode',
+              'scanner.temporal_analyzer', 'scanner.temporal_risk_engine', 'scanner.report',
+              'scanner.config', 'scanner.logger_config',
+              'scanner.ml.analysis', 'scanner.ml.pe_features', 'scanner.ml.keylogger_signatures',
+              'scanner.ml.model', 'scanner.ml.dataset',
+              'scanner.dashboard.app', 'main_controller', 'train_model',
+          ]
+          for name in modules:
+              importlib.import_module(name)
+              print('OK', name)
+          "
+
+  ml-pipeline:
+    name: Train & validate ML model (real ClaMP dataset)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install -r requirements.txt
+      - name: Train on the real dataset
+        run: python train_model.py | tee train_output.txt
+      - name: Fail if accuracy regresses below 90%
+        run: |
+          python -c "
+          import re
+          text = open('train_output.txt').read()
+          acc = float(re.search(r'Accuracy: ([\d.]+)', text).group(1))
+          print(f'Parsed accuracy: {acc}')
+          assert acc > 0.90, f'Accuracy {acc} is below the 0.90 regression threshold'
+          "
+
+  unit-tests:
+    name: Unit tests (Linux)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install -r requirements-dev.txt
+      - run: pytest -v
+
+  windows-smoke-test:
+    name: Windows smoke test (real WinVerifyTrust + PE parsing)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install -r requirements-dev.txt
+      - name: Run Windows-only tests against real system binaries
+        run: pytest -v tests/test_windows_signing.py

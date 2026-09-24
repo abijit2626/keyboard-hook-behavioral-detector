@@ -6,9 +6,13 @@ import os
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
-# Default log directory
+# Default log directory (relative to CWD). Created lazily inside
+# setup_logger() rather than here at import time -- this module is only
+# ever imported once per process (Python caches modules), so a one-time
+# mkdir() here would bind "logs/" to whatever the CWD happened to be at
+# first import, even if a caller changes directory afterward and a new
+# logger is set up later (e.g. tests using monkeypatch.chdir()).
 LOG_DIR = Path("logs")
-LOG_DIR.mkdir(exist_ok=True)
 
 # Log file path
 LOG_FILE = LOG_DIR / "keylogger_detection.log"
@@ -49,6 +53,7 @@ def setup_logger(name: str, log_level: str = None) -> logging.Logger:
     )
     
     # File handler with rotation (10MB max, keep 5 backups)
+    LOG_DIR.mkdir(exist_ok=True)
     file_handler = RotatingFileHandler(
         LOG_FILE,
         maxBytes=10 * 1024 * 1024,  # 10MB

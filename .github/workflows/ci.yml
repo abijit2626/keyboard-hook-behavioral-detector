@@ -29,7 +29,7 @@ jobs:
               'scanner.temporal_analyzer', 'scanner.temporal_risk_engine', 'scanner.report',
               'scanner.config', 'scanner.logger_config',
               'scanner.ml.analysis', 'scanner.ml.pe_features', 'scanner.ml.keylogger_signatures',
-              'scanner.ml.model', 'scanner.ml.dataset',
+              'scanner.ml.model', 'scanner.ml.dataset', 'scanner.ml.infer',
               'scanner.dashboard.app', 'main_controller', 'train_model',
           ]
           for name in modules:

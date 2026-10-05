@@ -32,6 +32,9 @@ python main_controller.py
 # In another terminal, at any time: see the current risk picture
 python -m scanner.report        # terminal table
 python -m scanner.dashboard     # web dashboard at http://127.0.0.1:5000
+
+# Score any executable(s) directly -- any OS, no monitor needed
+python -m scanner.ml.infer path/to/file.exe some_folder/ [--json]
 ```
 
 `scanner/report.py` prints a live-updating table like:
@@ -211,6 +214,51 @@ needs a rule-based trigger (`SUSPECT_DETECTED`, `NEW_HOOK_MODULE`, ...)
 before either model can move its risk level, and allowlisted processes
 score 0 regardless of what either model says.
 
+### Running inference directly on files
+
+The monitor only scores executables of running processes it has already
+flagged, and only on Windows. To run the same two layers on files you
+choose — on any OS, without the scan loop:
+
+```
+python -m scanner.ml.infer suspicious.exe
+python -m scanner.ml.infer C:\Downloads other.dll          # directories are searched recursively
+python -m scanner.ml.infer samples/ --json > scores.json  # machine-readable
+```
+
+```
+MALWARE ML  KEYLOGGER API  ATT&CK                                             EXECUTABLE
+----------  -------------  -------------------------------------------------  -----------------
+41%         61%            low_level_hook, keystate_polling, window_tracking  samples/hooky.exe
+41%         0%             -                                                  samples/plain.exe
+
+2 scored, 0 skipped.
+```
+
+(Real output for two tiny synthetic PEs of the kind `tests/test_infer.py`
+builds. Both share identical headers, so the malware-ML layer scores them
+the same; only their import tables differ, which is exactly what the
+keylogger-API column picks up.)
+
+It calls `scanner.ml.analysis.analyze_executable()` — the exact function the
+scanner uses — so scores match what the monitor would record, and it's
+static analysis only (files are parsed, never executed). Directories are
+filtered to `.exe .dll .sys .scr .ocx .cpl`; a file you name explicitly is
+always scored. Anything that isn't a parsable PE is listed as skipped. Exit
+status is `0` only if every file was scored; `1` if any path was missing or
+unparsable, or the model hasn't been trained.
+
+These are the same risk *signals*, not verdicts: a high score on a file is a
+reason to look closer, and a low one doesn't clear it (see *Design
+Philosophy*). To use the model from your own code:
+
+```python
+from scanner.ml.analysis import analyze_executable
+analyze_executable("file.exe")
+# {"ml_risk_score": 0.41, "keylogger_api_score": 0.6061,
+#  "keylogger_apis_matched": ["low_level_hook", "keystate_polling", "window_tracking"]}
+```
+
 ---
 
 ## Web Dashboard
@@ -256,6 +304,7 @@ project-root/
 │ │ ├── dataset.py                # Loads the real ClaMP CSV
 │ │ ├── data/                     # ClaMP_Integrated-5210 dataset (CSV)
 │ │ ├── model.py                  # Model load + inference
+│ │ ├── infer.py                  # CLI: score files/directories directly (python -m scanner.ml.infer)
 │ │ └── artifacts/                # Trained model (.joblib)
 │ ├── temporal_analyzer.py        # Behavior change detection
 │ ├── temporal_risk_engine.py     # Risk persistence + decay
@@ -334,7 +383,8 @@ pytest -v
 
 `tests/` covers the OS-independent logic directly — real dataset loading,
 the risk-engine's gating/decay/allowlist/ML-bonus math, the keylogger
-signature weighting, and the report table — without needing Windows.
+signature weighting, the report table, and the inference CLI (against a
+synthetic in-memory PE with a real import table) — without needing Windows.
 `tests/test_windows_signing.py` is Windows-only (auto-skipped elsewhere)
 and is the one place that exercises real binaries rather than mocks: the
 `WinVerifyTrust` signature check against an embedded-signed third-party

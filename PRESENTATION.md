@@ -71,10 +71,18 @@ start_dashboard.bat      # window 2
 - Real data and demo data share `temporal_state.json`. For a clean live run,
   first remove the sample data: `.venv\Scripts\python seed_demo_state.py --clear`
   (it only deletes files it created itself; use `--force` to override).
-- To show a detection live without writing any malware, use a harmless
-  AutoHotkey v2 script that registers a hotkey (the README's validation setup),
-  then watch it appear in the dashboard after a few cycles. Expect it to land
-  LOW/MEDIUM: persistence and several corroborating signals are required to reach HIGH.
+- To make something show up on cue, run the harmless trigger in a third
+  window while the monitor is running: `.venv\Scripts\python demo_trigger.py`.
+  It loads `user32.dll`, waits ~25 s so the monitor records a baseline, then
+  loads one DLL from your own Python install every 12 s (6 in total). The
+  scanner sees each as a new non-Windows module on a hook-capable process
+  (`NEW_HOOK_MODULE`, +35 each), so its row should climb to HIGH within a
+  couple of analysis cycles. It does not hook or read the keyboard. Flags:
+  `--delay`, `--interval`, `--count`. Ctrl+C ends it and the score then decays.
+  **Rehearse this once beforehand**: it has been unit-tested only for DLL
+  selection, not run end to end on Windows. Its ML/API percentages will be low
+  because `python.exe` is a benign binary, so it demonstrates the temporal
+  escalation, not the ML layers.
 - Restore the demo view any time with `seed_demo_state.py --force`.
 
 ## 6. Troubleshooting

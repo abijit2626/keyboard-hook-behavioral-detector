@@ -34,6 +34,10 @@ python -m scanner.report        # terminal table
 python -m scanner.dashboard     # web dashboard at http://127.0.0.1:5000
 ```
 
+**Setting up on a fresh Windows machine for a demo?** Run `setup_windows.bat -Demo`
+(creates a venv, installs dependencies, retrains the model, runs the tests and
+loads sample dashboard data), then follow [PRESENTATION.md](PRESENTATION.md).
+
 `scanner/report.py` prints a live-updating table like:
 
 ```

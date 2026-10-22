@@ -135,6 +135,12 @@ def update_temporal_risk(events):
         s = state[identity]
 
         old_score = s["risk_score"]
+        # The analyzer re-reports every process's first snapshot as
+        # SUSPECT_DETECTED on each cycle. Pruning keeps only the newest
+        # snapshots, so that first snapshot moves forward and the event looks
+        # new again. Only the first sighting of a process counts, otherwise a
+        # long-running process climbs to HIGH without any new behaviour.
+        repeat_suspect = etype == "SUSPECT_DETECTED" and s["event_counts"].get(etype, 0) > 0
         s["event_counts"][etype] = s["event_counts"].get(etype, 0) + 1
         base = os.path.basename(s["exe"]).lower()
         ml_score = e.get("ml_risk_score")
@@ -144,7 +150,7 @@ def update_temporal_risk(events):
         if keylogger_score is not None:
             s["keylogger_api_score"] = keylogger_score
             s["keylogger_apis_matched"] = e.get("keylogger_apis_matched") or []
-        if base in ALLOWLIST:
+        if base in ALLOWLIST or repeat_suspect:
             weight = 0
         else:
             weight = EVENT_WEIGHTS.get(etype, 0)

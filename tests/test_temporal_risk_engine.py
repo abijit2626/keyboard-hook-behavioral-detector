@@ -88,3 +88,54 @@ def test_risk_decays_when_behavior_stops():
     # No new events this cycle -- decay should reduce the score.
     second = tre.update_temporal_risk([])
     assert second["app.exe|7"]["risk_score"] < score_after_detect
+
+
+def test_repeated_suspect_detected_for_same_process_is_counted_once():
+    # Pruning moves the analyzer's first-seen snapshot forward, so the same
+    # process can be re-reported as SUSPECT_DETECTED with a newer time. Only
+    # the first sighting may add points, including the ML/keylogger bonus.
+    first_sighting = [
+        {"event": "SUSPECT_DETECTED", "identity": "tool.exe|8", "exe": r"C:\Apps\tool.exe",
+         "pid": 8, "time": "scan_1.json"},
+    ]
+    tre.update_temporal_risk(first_sighting)   # 15, then decay 5 -> 10
+
+    re_reported = [
+        {"event": "SUSPECT_DETECTED", "identity": "tool.exe|8", "exe": r"C:\Apps\tool.exe",
+         "pid": 8, "time": "scan_5.json", "ml_risk_score": 0.9,
+         "keylogger_api_score": 0.6, "keylogger_apis_matched": ["low_level_hook"]},
+    ]
+    state = tre.update_temporal_risk(re_reported)  # no points, decay 5 -> 5
+
+    assert state["tool.exe|8"]["risk_score"] == 5
+    assert state["tool.exe|8"]["risk_level"] == "LOW"
+
+
+def test_long_running_suspect_with_no_changes_does_not_reach_high():
+    identity = "steady.exe|9"
+    state = {}
+    for n in range(1, 25):
+        # Same process re-reported every cycle with an advancing timestamp.
+        state = tre.update_temporal_risk([
+            {"event": "SUSPECT_DETECTED", "identity": identity, "exe": r"C:\Apps\steady.exe",
+             "pid": 9, "time": f"scan_{n:03d}.json", "ml_risk_score": 0.95,
+             "keylogger_api_score": 0.8, "keylogger_apis_matched": ["low_level_hook"]},
+        ])
+        assert state[identity]["risk_level"] != "HIGH"
+
+    assert state[identity]["risk_score"] == 0
+
+
+def test_new_hook_modules_on_a_suspect_still_escalate_after_fix():
+    # Regression guard: the once-only rule must not block genuine new behaviour.
+    events = [
+        {"event": "SUSPECT_DETECTED", "identity": "live.exe|10", "exe": r"C:\Apps\live.exe",
+         "pid": 10, "time": "scan_1.json"},
+    ]
+    tre.update_temporal_risk(events)
+    for n in range(2, 4):
+        state = tre.update_temporal_risk([
+            {"event": "NEW_HOOK_MODULE", "identity": "live.exe|10", "exe": r"C:\Apps\live.exe",
+             "pid": 10, "time": f"scan_{n}.json"},
+        ])
+    assert state["live.exe|10"]["risk_level"] == "HIGH"
